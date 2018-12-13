@@ -1,0 +1,130 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+
+-record(rubik_cube, {
+          cube_map
+         }).
+
+-record(cube, {
+          color_map = #{0 => $Y,
+                        1 => $B,
+                        2 => $O,
+                        3 => $G,
+                        4 => $R,
+                        5 => $W}
+         }).
+
+new_rubik_cube() ->
+    #rubik_cube{
+       cube_map = maps:from_list([begin
+                                      {CubeIndex, #cube{}}
+                                  end || CubeIndex <- lists:seq(0, 20)])
+      }.
+
+print(#rubik_cube{
+         cube_map = CubeMap
+        }) ->
+    [begin
+         LayerColorList =
+             [begin
+                  #cube{
+                     color_map = ColorMap
+                    } = maps:get(CubeId, CubeMap),
+                  maps:get(Layer, ColorMap)
+              end || CubeId <- tuple_to_list(cube_id_by_layer(Layer))],
+         io:format("~p~n", [LayerColorList])
+     end || Layer <- lists:seq(0, 5)].
+
+layer_rotate(#rubik_cube{
+                cube_map = CubeMap
+               } = RubikCube, Layer, ClockWise) ->
+    {LayerMove, CubeMove} =
+        case ClockWise of
+            true ->
+                {2, 3};
+            false ->
+                {6, 1}
+        end,
+    CubeIds = cube_id_by_layer(Layer),
+    NewCubeMap =
+        lists:foldl(fun(Index, MapAcc) ->
+                            CubeId = get_elem(Index, CubeIds),
+                            NewCubeId = get_elem((Index + LayerMove) rem 8, CubeIds),
+
+                            NewCube = cube_rotate(maps:get(NewCubeId, CubeMap), Layer, CubeMove),
+                            maps:put(CubeId, NewCube, MapAcc)
+                    end, CubeMap, lists:seq(0, 7)),
+    RubikCube#rubik_cube{
+      cube_map = NewCubeMap
+     }.
+
+cube_rotate(#cube{
+               color_map = ColorMap
+              } = Cube, Layer, CubeMove) ->
+    CubeRotateSeqs = cube_rotate_seq(Layer),
+    NewColorMap =
+        lists:foldl(fun(Index, MapAcc) ->
+                            FaceId = get_elem(Index, CubeRotateSeqs),
+                            NewFaceId = get_elem((Index + CubeMove) rem 4, CubeRotateSeqs),
+
+                            NewColor = maps:get(NewFaceId, ColorMap),
+                            maps:put(FaceId, NewColor, MapAcc)
+                    end, ColorMap, lists:seq(0, 3)),
+    Cube#cube{
+      color_map = NewColorMap
+     }.
+
+cube_id_by_layer(0) ->
+    {0, 1, 2, 3, 4, 5, 6, 7};
+cube_id_by_layer(1) ->
+    {12, 13, 14, 9, 2, 1, 0, 8};
+cube_id_by_layer(2) ->
+    {18, 19, 12, 8, 0, 7, 6, 11};
+cube_id_by_layer(3) ->
+    {6, 5, 4, 10, 16, 17, 18, 11};
+cube_id_by_layer(4) ->
+    {14, 15, 16, 10, 4, 3, 2, 9};
+cube_id_by_layer(5) ->
+    {18, 17, 16, 15, 14, 13, 12, 19}.
+
+cube_rotate_seq(0) ->
+    {1, 2, 3, 4};
+cube_rotate_seq(1) ->
+    {2, 0, 4, 5};
+cube_rotate_seq(2) ->
+    {0, 1, 5, 3};
+cube_rotate_seq(3) ->
+    {0, 2, 5, 4};
+cube_rotate_seq(4) ->
+    {1, 0, 3, 5};
+cube_rotate_seq(5) ->
+    {2, 1, 4, 3}.
+
+get_elem(Index, Tuple) ->
+    element(Index + 1, Tuple).
+
+
+parse_cmd($U) -> {0, true};
+parse_cmd($u) -> {0, false};
+parse_cmd($F) -> {1, true};
+parse_cmd($f) -> {1, false};
+parse_cmd($L) -> {2, true};
+parse_cmd($l) -> {2, false};
+parse_cmd($B) -> {3, true};
+parse_cmd($b) -> {3, false};
+parse_cmd($R) -> {4, true};
+parse_cmd($r) -> {4, false};
+parse_cmd($D) -> {5, true};
+parse_cmd($d) -> {5, false};
+parse_cmd(_) -> false.
+
+main([CmdString | _]) ->
+    print(lists:foldl(fun(Cmd, Acc) ->
+                              case parse_cmd(Cmd) of
+                                  false ->
+                                      Acc;
+                                  {Layer, ClockWise} ->
+                                      layer_rotate(Acc, Layer, ClockWise)
+                              end
+                      end, new_rubik_cube(), CmdString)).
+
